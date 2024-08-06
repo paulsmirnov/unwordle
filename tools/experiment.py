@@ -118,19 +118,36 @@ class PositionalGuessScorer(GuessScorer):
         return result / len(word)
 
 
-def main():
-    words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
-    scorer = PositionalGuessScorer(PositionalWordStats(words))
-    scores = scorer.score_dict(words)
+class Matcher:
+    def __init__(self, guess: str, response: str) -> None:
+        self.bad_set = set()
+        self.good_set = set()
+        self.bad_dict = {}
+        self.good_dict = {}
+        for i, (letter, state) in enumerate(zip(guess, response)):
+            if state == "+":
+                self.good_set.add(letter)
+                self.bad_dict[i] = letter
+            elif state == "-":
+                self.bad_set.add(letter)
+            elif state == "!":
+                self.good_dict[i] = letter
+            else:
+                raise ValueError(f"Unknown response for {guess}: {state} at position {i}")
 
-    for word in ["hello", "cruel", "abbey", "aargh", "spine"]:
-        print(word, scores.get(word))
-
-    print("---")
-
-    sorted_scores = sorted((v, k) for k, v in scores.items())
-    for rank, word in sorted_scores[:1] + sorted_scores[-1:]:
-        print(word, rank)
+    def match(self, word: str) -> bool:
+        letters = set(word)
+        if self.bad_set.intersection(letters):
+            return False
+        if not (self.good_set <= letters):
+            return False
+        for i, letter in self.good_dict.items():
+            if word[i] != letter:
+                return False
+        for i, letter in self.bad_dict.items():
+            if word[i] == letter:
+                return False
+        return True
 
 
 def read_words(filepath: Path, length: int) -> list[str]:
@@ -138,6 +155,31 @@ def read_words(filepath: Path, length: int) -> list[str]:
         words = (line.strip() for line in f)
         words = [word for word in words if len(word) == length]
     return words
+
+
+def filter_words(words: list[str], guess: str, response: str) -> list[str]:
+    matcher = Matcher(guess, response)
+    return [word for word in words if matcher.match(word)]
+
+
+def main():
+    words = []
+    args_list = [
+        None,
+        ("lares", "---++"),
+        ("stone", "+--+!"),
+        ("mense", "-+++!"),
+    ]
+    for args in args_list:
+        if not args:
+            words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
+        else:
+            words = filter_words(words, *args)
+
+        scorer = PositionalGuessScorer(PositionalWordStats(words))
+        scores = scorer.score_dict(words)
+        sorted_scores = sorted(((v, k) for k, v in scores.items()), reverse=True)
+        print(len(words), "::", ", ".join(f"{k}: {v:.2f}" for v, k in sorted_scores[:5]))
 
 
 if __name__ == "__main__":
