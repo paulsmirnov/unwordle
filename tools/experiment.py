@@ -164,35 +164,45 @@ def filter_words(words: list[str], guess: str, response: str) -> list[str]:
     return [word for word in words if matcher.match(word)]
 
 
-def score_words(words: list[str]) -> dict[str, float]:
-    scorer = PositionalGuessScorer(PositionalWordStats(words))
+def score_words(words: list[str], possible_words: list[str]) -> dict[str, float]:
+    scorer = PositionalGuessScorer(PositionalWordStats(possible_words))
     return scorer.score_dict(words)
 
 
-def format_item(item):
+def format_item(item: tuple) -> str:
     return f"{item[0]}: {item[1]:.2f}"
 
 
-def print_scores(words: list[str]) -> None:
-    word_scores = score_words(words)
+def format_items(items: Iterable[tuple]) -> str:
+    return ", ".join(format_item(item) for item in islice(items, 5))
+
+
+def print_scores(words: list[str], possible_words: list[str] | None = None) -> None:
+    if possible_words is None:
+        possible_words = words
+    word_scores = score_words(words, possible_words)
+    possible_word_scores = score_words(possible_words, possible_words)
     print(
         len(word_scores),
         "::",
-        ", ".join(format_item(item) for item in islice(word_scores.items(), 5)),
+        format_items(word_scores.items()),
+        " // ",
+        format_items(possible_word_scores.items()),
     )
 
 
 def main():
-    possible_words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
-    print_scores(possible_words)
+    words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
+    print_scores(words)
 
+    possible_words = words
     for args in [
         ("lares", "---++"),
         ("stone", "+--+!"),
         ("mense", "-+++!"),
     ]:
         possible_words = filter_words(possible_words, *args)
-        print_scores(possible_words)
+        print_scores(words, possible_words)
 
 
 if __name__ == "__main__":
