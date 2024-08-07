@@ -120,6 +120,23 @@ class PositionalGuessScorer(GuessScorer):
         return result / len(word)
 
 
+class MatchingGuessScorer(GuessScorer):
+    """A scorer based on probability to guess the word.
+
+    Note: The score is greater if the guess is likely to be accepted.
+    """
+
+    def __init__(self, stats: PositionalWordStats) -> None:
+        assert isinstance(stats, PositionalWordStats)
+        super().__init__(stats)
+
+    def score(self, word: str) -> float:
+        result = 1.0
+        for i, letter in enumerate(word):
+            result *= self.stats.positional[i].get(letter, 0.0)
+        return result
+
+
 class Matcher:
     def __init__(self, guess: str, response: str) -> None:
         self.bad_set = set()
@@ -164,31 +181,49 @@ def filter_words(words: list[str], guess: str, response: str) -> list[str]:
     return [word for word in words if matcher.match(word)]
 
 
-def score_words(words: list[str], possible_words: list[str]) -> dict[str, float]:
-    scorer = PositionalGuessScorer(PositionalWordStats(possible_words))
+def score_words(
+    words: list[str],
+    possible_words: list[str],
+    Scorer: GuessScorer = PositionalGuessScorer,
+) -> dict[str, float]:
+    scorer = Scorer(PositionalWordStats(possible_words))
     return scorer.score_dict(words)
 
 
-def format_item(item: tuple) -> str:
-    return f"{item[0]}: {item[1]:.2f}"
+def remove_zeroes(words_scores: dict[str, float], epsilon: float = 0.0) -> dict[str, float]:
+    return {word: score for word, score in words_scores.items() if score > epsilon}
 
 
-def format_items(items: Iterable[tuple]) -> str:
-    return ", ".join(format_item(item) for item in islice(items, 5))
+def format_item(item: tuple | object) -> str:
+    if isinstance(item, tuple):
+        return f"{item[0]}: {item[1]:.2f}"
+    return str(item)
+
+
+def format_items(items: Iterable, limit: int = 5) -> str:
+    items = list(islice(items, limit + 1))
+    result = ", ".join(format_item(item) for item in items[:limit])
+    if len(items) > limit:
+        result += ", ..."
+    return result or "<none>"
 
 
 def print_scores(words: list[str], possible_words: list[str] | None = None) -> None:
     if possible_words is None:
         possible_words = words
-    word_scores = score_words(words, possible_words)
+
     possible_word_scores = score_words(possible_words, possible_words)
-    print(
-        len(word_scores),
-        "::",
-        format_items(word_scores.items()),
-        " // ",
-        format_items(possible_word_scores.items()),
+    word_scores = remove_zeroes(score_words(words, possible_words))
+    prob_scores = remove_zeroes(
+        score_words(possible_words, possible_words, MatchingGuessScorer),
+        0.5**WORD_LENGTH,
     )
+
+    print(f"""\
+{len(possible_words)} possible words ({format_items(possible_word_scores.keys())})
+Moves = {format_items(word_scores.items())}
+Match = {format_items(prob_scores.items())}
+""")
 
 
 def main():
@@ -197,9 +232,10 @@ def main():
 
     possible_words = words
     for args in [
-        ("lares", "---++"),
-        ("stone", "+--+!"),
-        ("mense", "-+++!"),
+        ("rates", "-!---"),
+        ("lingy", "-----"),
+        ("mocha", "!-!-+"),
+        # macaw
     ]:
         possible_words = filter_words(possible_words, *args)
         print_scores(words, possible_words)
