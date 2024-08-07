@@ -1,5 +1,6 @@
 import os
 from collections import Counter, defaultdict
+from itertools import islice
 from pathlib import Path
 from typing import Iterable
 
@@ -73,7 +74,8 @@ class GuessScorer:
         return [self.score(guess) for guess in guesses]
 
     def score_dict(self, guesses: Iterable[str]) -> dict[str, float]:
-        return {guess: self.score(guess) for guess in guesses}
+        items = [(guess, self.score(guess)) for guess in guesses]
+        return dict(sorted(items, key=lambda x: x[1], reverse=True))
 
 
 class PositionalGuessScorer(GuessScorer):
@@ -162,24 +164,35 @@ def filter_words(words: list[str], guess: str, response: str) -> list[str]:
     return [word for word in words if matcher.match(word)]
 
 
+def score_words(words: list[str]) -> dict[str, float]:
+    scorer = PositionalGuessScorer(PositionalWordStats(words))
+    return scorer.score_dict(words)
+
+
+def format_item(item):
+    return f"{item[0]}: {item[1]:.2f}"
+
+
+def print_scores(words: list[str]) -> None:
+    word_scores = score_words(words)
+    print(
+        len(word_scores),
+        "::",
+        ", ".join(format_item(item) for item in islice(word_scores.items(), 5)),
+    )
+
+
 def main():
-    words = []
-    args_list = [
-        None,
+    possible_words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
+    print_scores(possible_words)
+
+    for args in [
         ("lares", "---++"),
         ("stone", "+--+!"),
         ("mense", "-+++!"),
-    ]
-    for args in args_list:
-        if not args:
-            words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
-        else:
-            words = filter_words(words, *args)
-
-        scorer = PositionalGuessScorer(PositionalWordStats(words))
-        scores = scorer.score_dict(words)
-        sorted_scores = sorted(((v, k) for k, v in scores.items()), reverse=True)
-        print(len(words), "::", ", ".join(f"{k}: {v:.2f}" for v, k in sorted_scores[:5]))
+    ]:
+        possible_words = filter_words(possible_words, *args)
+        print_scores(possible_words)
 
 
 if __name__ == "__main__":
