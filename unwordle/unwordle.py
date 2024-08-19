@@ -227,7 +227,7 @@ Match = {format_items(prob_scores.items())}
 
 
 def main():
-    words = read_words(BASE_PATH / "ospd.txt", WORD_LENGTH)
+    words = read_words(BASE_PATH.parent / "data" / "words.txt", WORD_LENGTH)
     print_scores(words)
 
     possible_words = words
